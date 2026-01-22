@@ -1,4 +1,4 @@
--- SNAP CENTER AIM | CTAUKEP230
+-- ULTRA SNAP AIM | CTAUKEP230
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,7 +9,8 @@ local LP = Players.LocalPlayer
 -- ===== SETTINGS =====
 local AIM = false
 local FOV = 140
-local SNAP = true -- резкий аим
+local AIM_PART = "Head" -- "Head" или "Body"
+local PREDICT = 0.02   -- микро-предикт (чем меньше, тем резче)
 
 -- ===== DRAWING CIRCLE =====
 local circle = Drawing.new("Circle")
@@ -42,7 +43,7 @@ Instance.new("UICorner", toggle)
 
 -- ===== MAIN FRAME =====
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.fromOffset(210,135)
+frame.Size = UDim2.fromOffset(220,165)
 frame.Position = UDim2.fromScale(0.02,0.6)
 frame.BackgroundColor3 = Color3.fromRGB(18,18,18)
 frame.Visible = true
@@ -50,22 +51,28 @@ Instance.new("UICorner", frame)
 
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,22)
-title.Text = "SNAP AIM"
+title.Text = "ULTRA SNAP AIM"
 title.TextColor3 = Color3.new(1,1,1)
 title.BackgroundTransparency = 1
 title.TextScaled = true
 
-local aimBtn = Instance.new("TextButton", frame)
-aimBtn.Size = UDim2.new(1,-20,0,26)
-aimBtn.Position = UDim2.fromOffset(10,26)
-aimBtn.Text = "AIM: OFF"
-aimBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-aimBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", aimBtn)
+local function mkBtn(text,y)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(1,-20,0,26)
+    b.Position = UDim2.fromOffset(10,y)
+    b.Text = text
+    b.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    b.TextColor3 = Color3.new(1,1,1)
+    Instance.new("UICorner", b)
+    return b
+end
+
+local aimBtn = mkBtn("AIM: OFF",26)
+local partBtn = mkBtn("TARGET: HEAD",56)
 
 -- ===== SLIDER =====
 local sliderBG = Instance.new("Frame", frame)
-sliderBG.Position = UDim2.fromOffset(10,64)
+sliderBG.Position = UDim2.fromOffset(10,96)
 sliderBG.Size = UDim2.new(1,-20,0,8)
 sliderBG.BackgroundColor3 = Color3.fromRGB(60,60,60)
 Instance.new("UICorner", sliderBG)
@@ -76,7 +83,7 @@ slider.BackgroundColor3 = Color3.fromRGB(0,200,0)
 Instance.new("UICorner", slider)
 
 local fovLabel = Instance.new("TextLabel", frame)
-fovLabel.Position = UDim2.fromOffset(10,75)
+fovLabel.Position = UDim2.fromOffset(10,108)
 fovLabel.Size = UDim2.new(1,-20,0,20)
 fovLabel.Text = "FOV: "..FOV
 fovLabel.TextColor3 = Color3.new(1,1,1)
@@ -93,30 +100,31 @@ aimBtn.MouseButton1Click:Connect(function()
     aimBtn.Text = "AIM: "..(AIM and "ON" or "OFF")
 end)
 
+partBtn.MouseButton1Click:Connect(function()
+    if AIM_PART == "Head" then
+        AIM_PART = "Body"
+        partBtn.Text = "TARGET: BODY"
+    else
+        AIM_PART = "Head"
+        partBtn.Text = "TARGET: HEAD"
+    end
+end)
+
 -- ===== SLIDER FIX =====
 local dragging = false
-
 sliderBG.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1
-    or i.UserInputType == Enum.UserInputType.Touch then
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
         dragging = true
     end
 end)
-
 UIS.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1
-    or i.UserInputType == Enum.UserInputType.Touch then
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
 end)
-
 UIS.InputChanged:Connect(function(i)
-    if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
-    or i.UserInputType == Enum.UserInputType.Touch) then
-        local x = math.clamp(
-            (i.Position.X - sliderBG.AbsolutePosition.X) / sliderBG.AbsoluteSize.X,
-            0,1
-        )
+    if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+        local x = math.clamp((i.Position.X - sliderBG.AbsolutePosition.X) / sliderBG.AbsoluteSize.X, 0, 1)
         slider.Size = UDim2.fromScale(x,1)
         FOV = math.floor(60 + 220*x)
         circle.Radius = FOV
@@ -124,34 +132,32 @@ UIS.InputChanged:Connect(function(i)
     end
 end)
 
--- ===== VISIBILITY CHECK =====
+-- ===== VISIBILITY =====
 local function visible(part)
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = {LP.Character}
     params.FilterType = Enum.RaycastFilterType.Blacklist
-    local r = workspace:Raycast(
-        Camera.CFrame.Position,
-        part.Position - Camera.CFrame.Position,
-        params
-    )
+    local r = workspace:Raycast(Camera.CFrame.Position, part.Position - Camera.CFrame.Position, params)
     return r and r.Instance:IsDescendantOf(part.Parent)
 end
 
--- ===== TARGET FIND (CENTER FOV) =====
+-- ===== TARGET =====
 local function getTarget()
     local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     local best, dist = nil, math.huge
     for _,p in pairs(Players:GetPlayers()) do
         if p ~= LP and p.Character then
             local hum = p.Character:FindFirstChild("Humanoid")
+            local head = p.Character:FindFirstChild("Head")
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hum and hrp and hum.Health > 0 and visible(hrp) then
-                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            local part = (AIM_PART=="Head" and head) or hrp
+            if hum and part and hum.Health > 0 and visible(part) then
+                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
                 if onScreen then
                     local d = (Vector2.new(pos.X,pos.Y) - center).Magnitude
                     if d < FOV and d < dist then
                         dist = d
-                        best = hrp
+                        best = part
                     end
                 end
             end
@@ -160,23 +166,17 @@ local function getTarget()
     return best
 end
 
--- ===== MAIN LOOP (SNAP) =====
+-- ===== LOOP (ULTRA SNAP) =====
 RunService.RenderStepped:Connect(function()
-    circle.Position = Vector2.new(
-        Camera.ViewportSize.X/2,
-        Camera.ViewportSize.Y/2
-    )
-
+    circle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     if AIM then
         local t = getTarget()
         if t then
-            -- мгновенное наведение
-            Camera.CFrame = CFrame.new(
-                Camera.CFrame.Position,
-                t.Position
-            )
+            local vel = t.AssemblyLinearVelocity or Vector3.zero
+            local targetPos = t.Position + vel * PREDICT
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPos)
         end
     end
 end)
 
-print("[CTAUKEP230] SNAP Aim Loaded")
+print("[CTAUKEP230] Ultra Snap Aim Loaded")
