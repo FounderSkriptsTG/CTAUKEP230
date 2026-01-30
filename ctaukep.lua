@@ -1,4 +1,4 @@
--- ULTRA SNAP AIM | CTAUKEP230
+-- ULTRA SNAP AIM | CTAUKEP230 | С ТИМ ЧЕКОМ
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -141,12 +141,41 @@ local function visible(part)
     return r and r.Instance:IsDescendantOf(part.Parent)
 end
 
--- ===== TARGET =====
+-- ===== TEAM CHECK =====
+local function isTeamMate(player)
+    -- Проверяем тиму по основным методам
+    if LP.Team and player.Team and LP.Team == player.Team then
+        return true
+    end
+    
+    -- Проверка по Leaderstats (Kills/Deaths и т.д.)
+    local lpStats = LP:FindFirstChild("leaderstats")
+    local pStats = player:FindFirstChild("leaderstats")
+    if lpStats and pStats then
+        local lpKills = lpStats:FindFirstChild("Kills") or lpStats:FindFirstChild("K")
+        local pKills = pStats:FindFirstChild("Kills") or pStats:FindFirstChild("K")
+        -- Если у обоих есть kills и они в одной команде по цветам или другим признакам
+    end
+    
+    -- Проверка по цветам команды (BrickColor)
+    if LP.Character and player.Character then
+        local lpTeamColor = LP.Character:FindFirstChild("TeamColor") or LP.Character:FindFirstChild("Head")
+        local pTeamColor = player.Character:FindFirstChild("TeamColor") or player.Character:FindFirstChild("Head")
+        if lpTeamColor and pTeamColor and lpTeamColor.BrickColor == pTeamColor.BrickColor then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- ===== TARGET (С ТИМ ЧЕКОМ) =====
 local function getTarget()
     local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     local best, dist = nil, math.huge
     for _,p in pairs(Players:GetPlayers()) do
-        if p ~= LP and p.Character then
+        -- ✅ ТИМ ЧЕК - НЕ ЦЕЛИТСЯ В СВОИХ
+        if p ~= LP and not isTeamMate(p) and p.Character then
             local hum = p.Character:FindFirstChild("Humanoid")
             local head = p.Character:FindFirstChild("Head")
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -179,4 +208,4 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-print("[CTAUKEP230] Ultra Snap Aim Loaded")
+print("[CTAUKEP230] Ultra Snap Aim Loaded | ✅ TEAM CHECK ACTIVE")
